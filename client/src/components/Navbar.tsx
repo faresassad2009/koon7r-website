@@ -39,11 +39,18 @@ export default function Navbar({ cartCount, onCartClick }: NavbarProps) {
               <a
                 key={link.href}
                 href={link.href}
-                className="text-sm font-medium hover:text-primary transition-colors"
+                className="text-muted-foreground hover:text-primary transition-colors"
               >
                 {link.label}
               </a>
             ))}
+            {/* Admin Link */}
+            <a
+              href="/admin"
+              className="text-muted-foreground hover:text-primary transition-colors text-sm"
+            >
+              Admin
+            </a>
           </div>
 
           {/* Cart Button */}

@@ -5,6 +5,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import { createOrder, getUserOrders, getAllOrders } from "./db";
 import { notifyOwner } from "./_core/notification";
+import { TRPCError } from "@trpc/server";
 
 export const appRouter = router({
   system: systemRouter,
@@ -80,10 +81,49 @@ export const appRouter = router({
 
     all: protectedProcedure.query(async ({ ctx }) => {
       if (ctx.user.role !== "admin") {
-        throw new Error("Unauthorized");
+        throw new TRPCError({ code: "FORBIDDEN" });
       }
       return await getAllOrders();
     }),
+
+    updateStatus: protectedProcedure
+      .input(
+        z.object({
+          orderId: z.string(),
+          status: z.enum(["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"]),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new Error("Database not available");
+
+        const { orders } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+
+        await db.update(orders).set({ status: input.status }).where(eq(orders.id, input.orderId));
+        return { success: true };
+      }),
+
+    deleteOrder: protectedProcedure
+      .input(z.object({ orderId: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+
+        const db = await (await import("./db")).getDb();
+        if (!db) throw new Error("Database not available");
+
+        const { orders } = await import("../drizzle/schema");
+        const { eq } = await import("drizzle-orm");
+
+        await db.delete(orders).where(eq(orders.id, input.orderId));
+        return { success: true };
+      }),
   }),
 });
 
