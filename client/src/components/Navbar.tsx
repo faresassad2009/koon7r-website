@@ -26,14 +26,12 @@ export default function Navbar({ cartCount, onCartClick }: NavbarProps) {
       <div className="container">
         <div className="flex items-center justify-between h-16">
           {/* Logo */}
-          <Link href="/">
-            <a className="flex items-center gap-2">
-              <img src={APP_LOGO} alt={APP_TITLE} className="h-10 w-auto" />
-              <span className="text-xl font-bold gradient-text hidden sm:inline">
-                {APP_TITLE}
-              </span>
-            </a>
-          </Link>
+          <a href="/" className="flex items-center gap-2">
+            <img src={APP_LOGO} alt={APP_TITLE} className="h-10 w-auto" />
+            <span className="text-xl font-bold gradient-text hidden sm:inline">
+              {APP_TITLE}
+            </span>
+          </a>
 
           {/* Desktop Navigation */}
           <div className="hidden md:flex items-center gap-6">
