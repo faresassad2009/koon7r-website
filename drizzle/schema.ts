@@ -37,3 +37,44 @@ export const orders = mysqlTable("orders", {
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = typeof orders.$inferInsert;
 
+/**
+ * Messages table for contact form submissions
+ */
+export const messages = mysqlTable("messages", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  email: varchar("email", { length: 320 }).notNull(),
+  message: text("message").notNull(),
+  isRead: boolean("isRead").default(false).notNull(),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type Message = typeof messages.$inferSelect;
+export type InsertMessage = typeof messages.$inferInsert;
+
+/**
+ * Custom designs table for storing design images
+ */
+export const customDesigns = mysqlTable("customDesigns", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  orderId: varchar("orderId", { length: 64 }).notNull(),
+  frontDesignUrl: text("frontDesignUrl"),
+  backDesignUrl: text("backDesignUrl"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+
+export type CustomDesign = typeof customDesigns.$inferSelect;
+export type InsertCustomDesign = typeof customDesigns.$inferInsert;
+
+/**
+ * Settings table for website configuration
+ */
+export const settings = mysqlTable("settings", {
+  key: varchar("key", { length: 255 }).primaryKey(),
+  value: text("value").notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow(),
+});
+
+export type Setting = typeof settings.$inferSelect;
+export type InsertSetting = typeof settings.$inferInsert;
+

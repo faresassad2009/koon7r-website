@@ -16,7 +16,7 @@ export default function ContactSection() {
     message: "",
   });
 
-  const notifyOwnerMutation = trpc.system.notifyOwner.useMutation({
+  const createMessageMutation = trpc.messages.create.useMutation({
     onSuccess: () => {
       toast.success("Message sent successfully! We'll get back to you soon.");
       setFormData({ name: "", email: "", message: "" });
@@ -34,10 +34,7 @@ export default function ContactSection() {
       return;
     }
 
-    notifyOwnerMutation.mutate({
-      title: `Contact Form: ${formData.name}`,
-      content: `Name: ${formData.name}\nEmail: ${formData.email}\n\nMessage:\n${formData.message}`,
-    });
+    createMessageMutation.mutate(formData);
   };
 
   return (
@@ -164,9 +161,9 @@ export default function ContactSection() {
                   type="submit"
                   className="w-full"
                   size="lg"
-                  disabled={notifyOwnerMutation.isPending}
-                >
-                  {notifyOwnerMutation.isPending ? "Sending..." : "Send Message"}
+            disabled={createMessageMutation.isPending}
+          >
+            {createMessageMutation.isPending ? "Sending..." : "Send Message"}
                 </Button>
               </form>
             </CardContent>

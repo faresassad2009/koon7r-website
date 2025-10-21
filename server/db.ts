@@ -1,6 +1,6 @@
 import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users, orders, InsertOrder, Order } from "../drizzle/schema";
+import { InsertUser, users, orders, InsertOrder, Order, messages, InsertMessage, Message, customDesigns, InsertCustomDesign, settings, InsertSetting } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -132,4 +132,86 @@ export async function getAllOrders(): Promise<Order[]> {
   }
 
   return await db.select().from(orders).orderBy(desc(orders.createdAt));
+}
+
+// Message management functions
+export async function createMessage(message: InsertMessage): Promise<Message | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create message: database not available");
+    return null;
+  }
+
+  try {
+    await db.insert(messages).values(message);
+    const result = await db.select().from(messages).where(eq(messages.id, message.id)).limit(1);
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error("[Database] Failed to create message:", error);
+    throw error;
+  }
+}
+
+export async function getMessages(): Promise<Message[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get messages: database not available");
+    return [];
+  }
+
+  return await db.select().from(messages).orderBy(desc(messages.createdAt));
+}
+
+export async function markMessageAsRead(id: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot mark message as read: database not available");
+    return;
+  }
+
+  await db.update(messages).set({ isRead: true }).where(eq(messages.id, id));
+}
+
+// Settings management
+export async function getSetting(key: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get setting: database not available");
+    return null;
+  }
+
+  const result = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+  return result.length > 0 ? result[0].value : null;
+}
+
+export async function updateSetting(key: string, value: string): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot update setting: database not available");
+    return;
+  }
+
+  const existing = await db.select().from(settings).where(eq(settings.key, key)).limit(1);
+
+  if (existing.length > 0) {
+    await db.update(settings).set({ value, updatedAt: new Date() }).where(eq(settings.key, key));
+  } else {
+    await db.insert(settings).values({ key, value });
+  }
+}
+
+// Custom designs
+export async function saveCustomDesign(design: InsertCustomDesign): Promise<void> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot save custom design: database not available");
+    return;
+  }
+
+  try {
+    await db.insert(customDesigns).values(design);
+  } catch (error) {
+    console.error("[Database] Failed to save custom design:", error);
+    throw error;
+  }
 }

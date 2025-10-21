@@ -3,7 +3,7 @@ import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
-import { createOrder, getUserOrders, getAllOrders } from "./db";
+import { createOrder, getUserOrders, getAllOrders, createMessage, getMessages, markMessageAsRead, getSetting, updateSetting, saveCustomDesign } from "./db";
 import { notifyOwner } from "./_core/notification";
 import { TRPCError } from "@trpc/server";
 
@@ -72,6 +72,25 @@ export const appRouter = router({
           content: `Customer: ${input.customerName}\nPhone: ${input.customerPhone}\nEmail: ${input.customerEmail || "N/A"}\nAddress: ${input.customerAddress}\n\nItems:\n${itemsList}\n\nTotal: $${totalAmount}\n\nNotes: ${input.notes || "None"}`,
         });
 
+        // Send Telegram notification
+        const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+        const telegramChatId = process.env.TELEGRAM_CHAT_ID;
+        if (telegramToken && telegramChatId) {
+          try {
+            const message = `New Order: ${orderId}\n\nCustomer: ${input.customerName}\nPhone: ${input.customerPhone}\nEmail: ${input.customerEmail || "N/A"}\nAddress: ${input.customerAddress}\n\nItems:\n${itemsList}\n\nTotal: $${totalAmount}\n\nNotes: ${input.notes || "None"}`;
+            await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: telegramChatId,
+                text: message,
+              }),
+            });
+          } catch (error) {
+            console.error("Failed to send Telegram notification:", error);
+          }
+        }
+
         return order;
       }),
 
@@ -125,6 +144,111 @@ export const appRouter = router({
         return { success: true };
       }),
   }),
+
+  messages: router({
+    create: publicProcedure
+      .input(
+        z.object({
+          name: z.string().min(1),
+          email: z.string().email(),
+          message: z.string().min(1),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const messageId = `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const msg = await createMessage({
+          id: messageId,
+          name: input.name,
+          email: input.email,
+          message: input.message,
+        });
+
+        // Send Telegram notification
+        const telegramToken = process.env.TELEGRAM_BOT_TOKEN;
+        const telegramChatId = process.env.TELEGRAM_CHAT_ID;
+        if (telegramToken && telegramChatId) {
+          try {
+            await fetch(`https://api.telegram.org/bot${telegramToken}/sendMessage`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                chat_id: telegramChatId,
+                text: `New Message from ${input.name}\n\nEmail: ${input.email}\n\nMessage:\n${input.message}`,
+              }),
+            });
+          } catch (error) {
+            console.error("Failed to send Telegram notification:", error);
+          }
+        }
+
+        return msg;
+      }),
+
+    all: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new TRPCError({ code: "FORBIDDEN" });
+      }
+      return await getMessages();
+    }),
+
+    markAsRead: protectedProcedure
+      .input(z.object({ messageId: z.string() }))
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        await markMessageAsRead(input.messageId);
+        return { success: true };
+      }),
+  }),
+
+  settings: router({
+    get: protectedProcedure
+      .input(z.object({ key: z.string() }))
+      .query(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        return await getSetting(input.key);
+      }),
+
+    update: protectedProcedure
+      .input(
+        z.object({
+          key: z.string(),
+          value: z.string(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        if (ctx.user.role !== "admin") {
+          throw new TRPCError({ code: "FORBIDDEN" });
+        }
+        await updateSetting(input.key, input.value);
+        return { success: true };
+      }),
+  }),
+
+  customDesign: router({
+    save: publicProcedure
+      .input(
+        z.object({
+          orderId: z.string(),
+          frontDesignUrl: z.string().optional(),
+          backDesignUrl: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input }) => {
+        const designId = `design_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        await saveCustomDesign({
+          id: designId,
+          orderId: input.orderId,
+          frontDesignUrl: input.frontDesignUrl,
+          backDesignUrl: input.backDesignUrl,
+        });
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
+

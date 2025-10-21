@@ -4,9 +4,11 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { LogOut, Package, Settings, Trash2 } from "lucide-react";
+import { LogOut, Package, Settings, Trash2, Mail, Cog } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -27,10 +29,14 @@ const statusColors: Record<string, string> = {
 export default function AdminDashboard() {
   const { user, loading, logout } = useAuth();
   const [, setLocation] = useLocation();
-  const [selectedTab, setSelectedTab] = useState<"orders" | "settings">("orders");
+  const [selectedTab, setSelectedTab] = useState<"orders" | "messages" | "settings">("orders");
 
   // Always call hooks at the top level
   const ordersQuery = trpc.orders.all.useQuery(undefined, {
+    enabled: !!user && user.role === "admin",
+  });
+
+  const messagesQuery = trpc.messages.all.useQuery(undefined, {
     enabled: !!user && user.role === "admin",
   });
 
@@ -54,6 +60,19 @@ export default function AdminDashboard() {
     },
   });
 
+  const markMessageAsReadMutation = trpc.messages.markAsRead.useMutation({
+    onSuccess: () => {
+      messagesQuery.refetch();
+    },
+  });
+
+  const [settingsForm, setSettingsForm] = useState({
+    siteName: "",
+    contactEmail: "",
+    contactPhone: "",
+    description: "",
+  });
+
   // Wait for auth to load
   if (loading) {
     return (
@@ -75,6 +94,7 @@ export default function AdminDashboard() {
   };
 
   const orders = ordersQuery.data || [];
+  const messages = messagesQuery.data || [];
 
   return (
     <div className="min-h-screen bg-background">
@@ -95,7 +115,7 @@ export default function AdminDashboard() {
       {/* Main Content */}
       <main className="container py-8">
         {/* Tabs */}
-        <div className="flex gap-4 mb-8">
+        <div className="flex gap-4 mb-8 flex-wrap">
           <Button
             variant={selectedTab === "orders" ? "default" : "outline"}
             onClick={() => setSelectedTab("orders")}
@@ -104,10 +124,17 @@ export default function AdminDashboard() {
             Orders ({orders.length})
           </Button>
           <Button
+            variant={selectedTab === "messages" ? "default" : "outline"}
+            onClick={() => setSelectedTab("messages")}
+          >
+            <Mail className="mr-2 h-4 w-4" />
+            Messages ({messages.filter(m => !m.isRead).length})
+          </Button>
+          <Button
             variant={selectedTab === "settings" ? "default" : "outline"}
             onClick={() => setSelectedTab("settings")}
           >
-            <Settings className="mr-2 h-4 w-4" />
+            <Cog className="mr-2 h-4 w-4" />
             Settings
           </Button>
         </div>
@@ -243,44 +270,151 @@ export default function AdminDashboard() {
           </div>
         )}
 
+        {/* Messages Tab */}
+        {selectedTab === "messages" && (
+          <div className="space-y-4">
+            {messagesQuery.isLoading ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-muted-foreground">Loading messages...</p>
+                </CardContent>
+              </Card>
+            ) : messages.length === 0 ? (
+              <Card>
+                <CardContent className="pt-6">
+                  <p className="text-muted-foreground">No messages yet</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {messages.map((msg) => (
+                  <Card key={msg.id} className={msg.isRead ? "opacity-60" : ""}>
+                    <CardHeader>
+                      <div className="flex items-start justify-between">
+                        <div>
+                          <CardTitle className="text-lg">{msg.name}</CardTitle>
+                          <p className="text-sm text-muted-foreground mt-1">{msg.email}</p>
+                        </div>
+                        {!msg.isRead && (
+                          <Badge variant="default">New</Badge>
+                        )}
+                      </div>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="bg-background p-4 rounded">
+                        <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                      </div>
+                      <div className="flex justify-between items-center text-xs text-muted-foreground">
+                        <p>{msg.createdAt ? new Date(msg.createdAt).toLocaleString() : "N/A"}</p>
+                        {!msg.isRead && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                              markMessageAsReadMutation.mutate({ messageId: msg.id })
+                            }
+                          >
+                            Mark as Read
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
         {/* Settings Tab */}
         {selectedTab === "settings" && (
           <div className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>System Settings</CardTitle>
+                <CardTitle>Website Settings</CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <p className="font-medium mb-2">Contact Email</p>
-                  <p className="text-muted-foreground">info@koon7r.com</p>
+                  <label className="text-sm font-medium">Site Name</label>
+                  <Input
+                    value={settingsForm.siteName}
+                    onChange={(e) =>
+                      setSettingsForm({ ...settingsForm, siteName: e.target.value })
+                    }
+                    placeholder="KOON7R"
+                  />
                 </div>
                 <div>
-                  <p className="font-medium mb-2">Contact Phone</p>
-                  <p className="text-muted-foreground">+970 59 123 4567</p>
+                  <label className="text-sm font-medium">Contact Email</label>
+                  <Input
+                    value={settingsForm.contactEmail}
+                    onChange={(e) =>
+                      setSettingsForm({ ...settingsForm, contactEmail: e.target.value })
+                    }
+                    placeholder="info@koon7r.com"
+                  />
                 </div>
                 <div>
-                  <p className="font-medium mb-2">Total Orders</p>
-                  <p className="text-muted-foreground">{orders.length}</p>
+                  <label className="text-sm font-medium">Contact Phone</label>
+                  <Input
+                    value={settingsForm.contactPhone}
+                    onChange={(e) =>
+                      setSettingsForm({ ...settingsForm, contactPhone: e.target.value })
+                    }
+                    placeholder="+970 59 123 4567"
+                  />
                 </div>
                 <div>
-                  <p className="font-medium mb-2">Total Revenue</p>
-                  <p className="text-primary font-bold">
-                    ${orders.reduce((sum, order) => sum + order.totalAmount, 0)}
-                  </p>
+                  <label className="text-sm font-medium">Site Description</label>
+                  <Textarea
+                    value={settingsForm.description}
+                    onChange={(e) =>
+                      setSettingsForm({ ...settingsForm, description: e.target.value })
+                    }
+                    placeholder="Describe your business..."
+                  />
+                </div>
+                <Button>Save Settings</Button>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle>Statistics</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <p className="text-muted-foreground text-sm">Total Orders</p>
+                    <p className="text-2xl font-bold">{orders.length}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-sm">Total Revenue</p>
+                    <p className="text-2xl font-bold text-primary">
+                      ${orders.reduce((sum, order) => sum + order.totalAmount, 0)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-sm">Unread Messages</p>
+                    <p className="text-2xl font-bold">{messages.filter(m => !m.isRead).length}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-sm">Pending Orders</p>
+                    <p className="text-2xl font-bold">{orders.filter(o => o.status === "pending").length}</p>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle>Order Statistics</CardTitle>
+                <CardTitle>Order Status Breakdown</CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"].map(
                   (status) => (
-                    <div key={status} className="flex justify-between">
-                      <span className="capitalize">{status}</span>
+                    <div key={status} className="flex justify-between items-center">
+                      <span className="capitalize text-sm">{status}</span>
                       <Badge>
                         {orders.filter((o) => o.status === status).length}
                       </Badge>
