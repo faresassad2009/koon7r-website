@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { eq, desc } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertUser, users, orders, InsertOrder, Order } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -85,4 +85,51 @@ export async function getUser(id: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+// Order management functions
+export async function createOrder(order: InsertOrder): Promise<Order | null> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot create order: database not available");
+    return null;
+  }
+
+  try {
+    await db.insert(orders).values(order);
+    const result = await db.select().from(orders).where(eq(orders.id, order.id)).limit(1);
+    return result.length > 0 ? result[0] : null;
+  } catch (error) {
+    console.error("[Database] Failed to create order:", error);
+    throw error;
+  }
+}
+
+export async function getOrder(id: string): Promise<Order | undefined> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get order: database not available");
+    return undefined;
+  }
+
+  const result = await db.select().from(orders).where(eq(orders.id, id)).limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function getUserOrders(userId: string): Promise<Order[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get user orders: database not available");
+    return [];
+  }
+
+  return await db.select().from(orders).where(eq(orders.userId, userId)).orderBy(desc(orders.createdAt));
+}
+
+export async function getAllOrders(): Promise<Order[]> {
+  const db = await getDb();
+  if (!db) {
+    console.warn("[Database] Cannot get all orders: database not available");
+    return [];
+  }
+
+  return await db.select().from(orders).orderBy(desc(orders.createdAt));
+}

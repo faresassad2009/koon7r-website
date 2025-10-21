@@ -1,9 +1,7 @@
-import { mysqlEnum, mysqlTable, text, timestamp, varchar } from "drizzle-orm/mysql-core";
+import { mysqlEnum, mysqlTable, text, timestamp, varchar, int, boolean } from "drizzle-orm/mysql-core";
 
 /**
  * Core user table backing auth flow.
- * Extend this file with additional tables as your product grows.
- * Columns use camelCase to match both database fields and generated types.
  */
 export const users = mysqlTable("users", {
   id: varchar("id", { length: 64 }).primaryKey(),
@@ -18,4 +16,24 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+/**
+ * Orders table for tracking customer orders
+ */
+export const orders = mysqlTable("orders", {
+  id: varchar("id", { length: 64 }).primaryKey(),
+  userId: varchar("userId", { length: 64 }),
+  customerName: varchar("customerName", { length: 255 }).notNull(),
+  customerEmail: varchar("customerEmail", { length: 320 }),
+  customerPhone: varchar("customerPhone", { length: 50 }).notNull(),
+  customerAddress: text("customerAddress").notNull(),
+  items: text("items").notNull(), // JSON string of cart items
+  totalAmount: int("totalAmount").notNull(),
+  status: mysqlEnum("status", ["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"]).default("pending").notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow(),
+});
+
+export type Order = typeof orders.$inferSelect;
+export type InsertOrder = typeof orders.$inferInsert;
+

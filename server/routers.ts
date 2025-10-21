@@ -1,7 +1,10 @@
 import { COOKIE_NAME } from "@shared/const";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
-import { publicProcedure, router } from "./_core/trpc";
+import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
+import { z } from "zod";
+import { createOrder, getUserOrders, getAllOrders } from "./db";
+import { notifyOwner } from "./_core/notification";
 
 export const appRouter = router({
   system: systemRouter,
@@ -17,12 +20,71 @@ export const appRouter = router({
     }),
   }),
 
-  // TODO: add feature routers here, e.g.
-  // todo: router({
-  //   list: protectedProcedure.query(({ ctx }) =>
-  //     db.getUserTodos(ctx.user.id)
-  //   ),
-  // }),
+  orders: router({
+    create: publicProcedure
+      .input(
+        z.object({
+          customerName: z.string().min(1),
+          customerEmail: z.string().email().optional(),
+          customerPhone: z.string().min(1),
+          customerAddress: z.string().min(1),
+          items: z.array(
+            z.object({
+              id: z.number(),
+              name: z.string(),
+              price: z.number(),
+              size: z.string().optional(),
+              image: z.string(),
+              quantity: z.number(),
+            })
+          ),
+          notes: z.string().optional(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const orderId = `order_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+        const totalAmount = input.items.reduce(
+          (sum, item) => sum + item.price * item.quantity,
+          0
+        );
+
+        const order = await createOrder({
+          id: orderId,
+          userId: ctx.user?.id,
+          customerName: input.customerName,
+          customerEmail: input.customerEmail,
+          customerPhone: input.customerPhone,
+          customerAddress: input.customerAddress,
+          items: JSON.stringify(input.items),
+          totalAmount,
+          notes: input.notes,
+          status: "pending",
+        });
+
+        // Notify owner about new order
+        const itemsList = input.items
+          .map((item) => `${item.name} (${item.size || "N/A"}) x${item.quantity} - $${item.price}`)
+          .join("\n");
+
+        await notifyOwner({
+          title: `New Order: ${orderId}`,
+          content: `Customer: ${input.customerName}\nPhone: ${input.customerPhone}\nEmail: ${input.customerEmail || "N/A"}\nAddress: ${input.customerAddress}\n\nItems:\n${itemsList}\n\nTotal: $${totalAmount}\n\nNotes: ${input.notes || "None"}`,
+        });
+
+        return order;
+      }),
+
+    myOrders: protectedProcedure.query(async ({ ctx }) => {
+      return await getUserOrders(ctx.user.id);
+    }),
+
+    all: protectedProcedure.query(async ({ ctx }) => {
+      if (ctx.user.role !== "admin") {
+        throw new Error("Unauthorized");
+      }
+      return await getAllOrders();
+    }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;
