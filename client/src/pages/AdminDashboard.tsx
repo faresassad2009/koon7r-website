@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "@/_core/hooks/useAuth";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
@@ -73,6 +73,13 @@ export default function AdminDashboard() {
     description: "",
   });
 
+  // Redirect if not admin
+  useEffect(() => {
+    if (!loading && (!user || user.role !== "admin")) {
+      setLocation("/");
+    }
+  }, [user, loading, setLocation]);
+
   // Wait for auth to load
   if (loading) {
     return (
@@ -84,7 +91,6 @@ export default function AdminDashboard() {
 
   // Redirect if not admin
   if (!user || user.role !== "admin") {
-    setLocation("/");
     return null;
   }
 
