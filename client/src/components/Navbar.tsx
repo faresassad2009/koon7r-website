@@ -46,7 +46,7 @@ export default function Navbar({ cartCount, onCartClick }: NavbarProps) {
             ))}
             {/* Admin Link */}
             <a
-              href="/admin"
+              href="/admin/login"
               className="text-muted-foreground hover:text-primary transition-colors text-sm"
             >
               Admin

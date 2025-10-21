@@ -19,6 +19,37 @@ export const appRouter = router({
         success: true,
       } as const;
     }),
+    adminLogin: publicProcedure
+      .input(
+        z.object({
+          email: z.string().email(),
+          password: z.string(),
+        })
+      )
+      .mutation(async ({ input, ctx }) => {
+        const adminEmail = process.env.ADMIN_EMAIL;
+        const adminPassword = process.env.ADMIN_PASSWORD;
+
+        if (!adminEmail || !adminPassword) {
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: "Admin credentials not configured",
+          });
+        }
+
+        if (input.email !== adminEmail || input.password !== adminPassword) {
+          throw new TRPCError({
+            code: "UNAUTHORIZED",
+            message: "Invalid email or password",
+          });
+        }
+
+        // Set session cookie
+        const cookieOptions = getSessionCookieOptions(ctx.req);
+        ctx.res.cookie(COOKIE_NAME, "admin_session", cookieOptions);
+
+        return { success: true };
+      }),
   }),
 
   orders: router({

@@ -1,52 +1,45 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "@/_core/hooks/useAuth";
+import { useEffect, useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
-import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
-import { LogOut, Package, Settings, Trash2, Mail, Cog } from "lucide-react";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-
-const statusColors: Record<string, string> = {
-  pending: "bg-yellow-500",
-  confirmed: "bg-blue-500",
-  processing: "bg-purple-500",
-  shipped: "bg-cyan-500",
-  delivered: "bg-green-500",
-  cancelled: "bg-red-500",
-};
+import { LogOut, Trash2 } from "lucide-react";
 
 export default function AdminDashboard() {
-  const { user, loading, logout } = useAuth();
   const [, setLocation] = useLocation();
-  const [selectedTab, setSelectedTab] = useState<"orders" | "messages" | "settings">("orders");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminEmail, setAdminEmail] = useState("");
+  const [activeTab, setActiveTab] = useState("orders");
 
-  // Always call hooks at the top level
+  useEffect(() => {
+    const adminAuth = localStorage.getItem("adminAuth");
+    const email = localStorage.getItem("adminEmail");
+    
+    if (adminAuth === "true" && email) {
+      setIsAdmin(true);
+      setAdminEmail(email);
+    } else {
+      setLocation("/admin/login");
+    }
+  }, [setLocation]);
+
   const ordersQuery = trpc.orders.all.useQuery(undefined, {
-    enabled: !!user && user.role === "admin",
+    enabled: isAdmin,
   });
 
   const messagesQuery = trpc.messages.all.useQuery(undefined, {
-    enabled: !!user && user.role === "admin",
+    enabled: isAdmin,
   });
 
   const updateStatusMutation = trpc.orders.updateStatus.useMutation({
     onSuccess: () => {
-      toast.success("Order status updated!");
+      toast.success("Status updated!");
       ordersQuery.refetch();
     },
-    onError: () => {
-      toast.error("Failed to update order status");
+    onError: (error) => {
+      toast.error(error.message || "Failed to update status");
     },
   });
 
@@ -55,383 +48,233 @@ export default function AdminDashboard() {
       toast.success("Order deleted!");
       ordersQuery.refetch();
     },
-    onError: () => {
-      toast.error("Failed to delete order");
+    onError: (error) => {
+      toast.error(error.message || "Failed to delete order");
     },
   });
 
-  const markMessageAsReadMutation = trpc.messages.markAsRead.useMutation({
+  const markAsReadMutation = trpc.messages.markAsRead.useMutation({
     onSuccess: () => {
       messagesQuery.refetch();
     },
+    onError: (error) => {
+      toast.error(error.message || "Failed to mark as read");
+    },
   });
 
-  const [settingsForm, setSettingsForm] = useState({
-    siteName: "",
-    contactEmail: "",
-    contactPhone: "",
-    description: "",
-  });
-
-  // Redirect if not admin
-  useEffect(() => {
-    if (!loading && (!user || user.role !== "admin")) {
-      setLocation("/");
-    }
-  }, [user, loading, setLocation]);
-
-  // Wait for auth to load
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
-      </div>
-    );
-  }
-
-  // Redirect if not admin
-  if (!user || user.role !== "admin") {
-    return null;
-  }
-
-  const handleLogout = async () => {
-    await logout();
+  const handleLogout = () => {
+    localStorage.removeItem("adminAuth");
+    localStorage.removeItem("adminEmail");
     setLocation("/");
   };
+
+  if (!isAdmin) {
+    return null;
+  }
 
   const orders = ordersQuery.data || [];
   const messages = messagesQuery.data || [];
 
+  const pendingCount = orders.filter((o) => o.status === "pending").length;
+  const confirmedCount = orders.filter((o) => o.status === "confirmed").length;
+  const shippedCount = orders.filter((o) => o.status === "shipped").length;
+  const deliveredCount = orders.filter((o) => o.status === "delivered").length;
+
   return (
-    <div className="min-h-screen bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-card border-b border-border">
-        <div className="container py-4 flex items-center justify-between">
+    <div className="min-h-screen bg-background p-4 md:p-8">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-2xl font-bold gradient-text">Admin Dashboard</h1>
-            <p className="text-sm text-muted-foreground">Welcome, {user?.name}</p>
+            <h1 className="text-3xl font-bold gradient-text">Admin Dashboard</h1>
+            <p className="text-muted-foreground mt-2">Welcome, {adminEmail}</p>
           </div>
-          <Button variant="outline" onClick={handleLogout}>
+          <Button variant="destructive" onClick={handleLogout}>
             <LogOut className="mr-2 h-4 w-4" />
             Logout
           </Button>
         </div>
-      </header>
 
-      {/* Main Content */}
-      <main className="container py-8">
-        {/* Tabs */}
-        <div className="flex gap-4 mb-8 flex-wrap">
-          <Button
-            variant={selectedTab === "orders" ? "default" : "outline"}
-            onClick={() => setSelectedTab("orders")}
-          >
-            <Package className="mr-2 h-4 w-4" />
-            Orders ({orders.length})
-          </Button>
-          <Button
-            variant={selectedTab === "messages" ? "default" : "outline"}
-            onClick={() => setSelectedTab("messages")}
-          >
-            <Mail className="mr-2 h-4 w-4" />
-            Messages ({messages.filter(m => !m.isRead).length})
-          </Button>
-          <Button
-            variant={selectedTab === "settings" ? "default" : "outline"}
-            onClick={() => setSelectedTab("settings")}
-          >
-            <Cog className="mr-2 h-4 w-4" />
-            Settings
-          </Button>
+        {/* Stats */}
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Pending Orders
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{pendingCount}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Confirmed
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{confirmedCount}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Shipped
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{shippedCount}</div>
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                Delivered
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{deliveredCount}</div>
+            </CardContent>
+          </Card>
         </div>
 
-        {/* Orders Tab */}
-        {selectedTab === "orders" && (
-          <div className="space-y-4">
+        {/* Tabs */}
+        <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <TabsList className="grid w-full grid-cols-2">
+            <TabsTrigger value="orders">Orders ({orders.length})</TabsTrigger>
+            <TabsTrigger value="messages">Messages ({messages.length})</TabsTrigger>
+          </TabsList>
+
+          {/* Orders Tab */}
+          <TabsContent value="orders" className="space-y-4">
             {ordersQuery.isLoading ? (
               <Card>
-                <CardContent className="pt-6">
-                  <p className="text-muted-foreground">Loading orders...</p>
-                </CardContent>
+                <CardContent className="pt-6">Loading orders...</CardContent>
               </Card>
             ) : orders.length === 0 ? (
               <Card>
-                <CardContent className="pt-6">
-                  <p className="text-muted-foreground">No orders yet</p>
+                <CardContent className="pt-6 text-center text-muted-foreground">
+                  No orders yet
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4">
-                {orders.map((order) => (
-                  <Card key={order.id}>
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-lg">{order.id}</CardTitle>
-                          <p className="text-sm text-muted-foreground mt-1">
-                            {order.customerName} • {order.customerPhone}
-                          </p>
-                        </div>
-                        <Badge className={statusColors[order.status]}>
-                          {order.status}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {/* Order Details */}
-                      <div className="grid grid-cols-2 gap-4 text-sm">
-                        <div>
-                          <p className="text-muted-foreground">Email</p>
-                          <p className="font-medium">{order.customerEmail || "N/A"}</p>
-                        </div>
-                        <div>
-                          <p className="text-muted-foreground">Total</p>
-                          <p className="font-bold text-primary">${order.totalAmount}</p>
-                        </div>
-                        <div className="col-span-2">
-                          <p className="text-muted-foreground">Address</p>
-                          <p className="font-medium">{order.customerAddress}</p>
-                        </div>
-                        {order.notes && (
-                          <div className="col-span-2">
-                            <p className="text-muted-foreground">Notes</p>
-                            <p className="font-medium">{order.notes}</p>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* Items */}
+              orders.map((order) => (
+                <Card key={order.id}>
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
                       <div>
-                        <p className="text-muted-foreground text-sm mb-2">Items</p>
-                        <div className="text-sm space-y-1 bg-background p-3 rounded">
-                          {(() => {
-                            try {
-                              const items = JSON.parse(order.items);
-                              return items.map(
-                                (item: any, idx: number) => (
-                                  <p key={idx}>
-                                    {item.name} ({item.size}) x{item.quantity} - ${item.price}
-                                  </p>
-                                )
-                              );
-                            } catch {
-                              return <p>Error parsing items</p>;
-                            }
-                          })()}
+                        <CardTitle className="text-lg">{order.id}</CardTitle>
+                        <p className="text-sm text-muted-foreground mt-1">
+                          Customer: {order.customerName}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="text-lg font-bold">${order.totalAmount}</div>
+                        <div className="text-xs text-muted-foreground mt-1">
+                          {order.createdAt ? new Date(order.createdAt).toLocaleDateString() : 'N/A'}
                         </div>
                       </div>
-
-                      {/* Status Update */}
-                      <div className="flex gap-2 items-end">
-                        <div className="flex-1">
-                          <p className="text-muted-foreground text-sm mb-2">Update Status</p>
-                          <Select
-                            value={order.status}
-                            onValueChange={(status) =>
-                              updateStatusMutation.mutate({
-                                orderId: order.id,
-                                status: status as any,
-                              })
-                            }
-                          >
-                            <SelectTrigger>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="pending">Pending</SelectItem>
-                              <SelectItem value="confirmed">Confirmed</SelectItem>
-                              <SelectItem value="processing">Processing</SelectItem>
-                              <SelectItem value="shipped">Shipped</SelectItem>
-                              <SelectItem value="delivered">Delivered</SelectItem>
-                              <SelectItem value="cancelled">Cancelled</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          onClick={() =>
-                            deleteOrderMutation.mutate({ orderId: order.id })
-                          }
-                          disabled={deleteOrderMutation.isPending}
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <p className="text-muted-foreground">Email</p>
+                        <p>{order.customerEmail || "N/A"}</p>
                       </div>
-
-                      {/* Timestamps */}
-                      <div className="text-xs text-muted-foreground pt-2 border-t">
-                        {order.createdAt && (
-                          <p>Created: {new Date(order.createdAt).toLocaleString()}</p>
-                        )}
-                        {order.updatedAt && (
-                          <p>Updated: {new Date(order.updatedAt).toLocaleString()}</p>
-                        )}
+                      <div>
+                        <p className="text-muted-foreground">Phone</p>
+                        <p>{order.customerPhone}</p>
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                      <div className="col-span-2">
+                        <p className="text-muted-foreground">Address</p>
+                        <p>{order.customerAddress}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex gap-2 flex-wrap">
+                      <select
+                        value={order.status}
+                        onChange={(e) =>
+                          updateStatusMutation.mutate({
+                            orderId: order.id,
+                            status: e.target.value as any,
+                          })
+                        }
+                        className="px-3 py-2 rounded-md border border-border bg-background text-sm"
+                      >
+                        <option value="pending">Pending</option>
+                        <option value="confirmed">Confirmed</option>
+                        <option value="processing">Processing</option>
+                        <option value="shipped">Shipped</option>
+                        <option value="delivered">Delivered</option>
+                        <option value="cancelled">Cancelled</option>
+                      </select>
+
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() => deleteOrderMutation.mutate({ orderId: order.id })}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))
             )}
-          </div>
-        )}
+          </TabsContent>
 
-        {/* Messages Tab */}
-        {selectedTab === "messages" && (
-          <div className="space-y-4">
+          {/* Messages Tab */}
+          <TabsContent value="messages" className="space-y-4">
             {messagesQuery.isLoading ? (
               <Card>
-                <CardContent className="pt-6">
-                  <p className="text-muted-foreground">Loading messages...</p>
-                </CardContent>
+                <CardContent className="pt-6">Loading messages...</CardContent>
               </Card>
             ) : messages.length === 0 ? (
               <Card>
-                <CardContent className="pt-6">
-                  <p className="text-muted-foreground">No messages yet</p>
+                <CardContent className="pt-6 text-center text-muted-foreground">
+                  No messages yet
                 </CardContent>
               </Card>
             ) : (
-              <div className="grid gap-4">
-                {messages.map((msg) => (
-                  <Card key={msg.id} className={msg.isRead ? "opacity-60" : ""}>
-                    <CardHeader>
-                      <div className="flex items-start justify-between">
-                        <div>
-                          <CardTitle className="text-lg">{msg.name}</CardTitle>
-                          <p className="text-sm text-muted-foreground mt-1">{msg.email}</p>
-                        </div>
-                        {!msg.isRead && (
-                          <Badge variant="default">New</Badge>
-                        )}
+              messages.map((msg) => (
+                <Card
+                  key={msg.id}
+                  className={msg.isRead ? "opacity-60" : "border-primary"}
+                >
+                  <CardHeader>
+                    <div className="flex justify-between items-start">
+                      <div>
+                        <CardTitle className="text-lg">{msg.name}</CardTitle>
+                        <p className="text-sm text-muted-foreground">{msg.email}</p>
                       </div>
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      <div className="bg-background p-4 rounded">
-                        <p className="text-sm whitespace-pre-wrap">{msg.message}</p>
+                      <div className="text-xs text-muted-foreground">
+                        {msg.createdAt ? new Date(msg.createdAt).toLocaleDateString() : 'N/A'}
                       </div>
-                      <div className="flex justify-between items-center text-xs text-muted-foreground">
-                        <p>{msg.createdAt ? new Date(msg.createdAt).toLocaleString() : "N/A"}</p>
-                        {!msg.isRead && (
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() =>
-                              markMessageAsReadMutation.mutate({ messageId: msg.id })
-                            }
-                          >
-                            Mark as Read
-                          </Button>
-                        )}
-                      </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Settings Tab */}
-        {selectedTab === "settings" && (
-          <div className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>Website Settings</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div>
-                  <label className="text-sm font-medium">Site Name</label>
-                  <Input
-                    value={settingsForm.siteName}
-                    onChange={(e) =>
-                      setSettingsForm({ ...settingsForm, siteName: e.target.value })
-                    }
-                    placeholder="KOON7R"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Contact Email</label>
-                  <Input
-                    value={settingsForm.contactEmail}
-                    onChange={(e) =>
-                      setSettingsForm({ ...settingsForm, contactEmail: e.target.value })
-                    }
-                    placeholder="info@koon7r.com"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Contact Phone</label>
-                  <Input
-                    value={settingsForm.contactPhone}
-                    onChange={(e) =>
-                      setSettingsForm({ ...settingsForm, contactPhone: e.target.value })
-                    }
-                    placeholder="+970 59 123 4567"
-                  />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Site Description</label>
-                  <Textarea
-                    value={settingsForm.description}
-                    onChange={(e) =>
-                      setSettingsForm({ ...settingsForm, description: e.target.value })
-                    }
-                    placeholder="Describe your business..."
-                  />
-                </div>
-                <Button>Save Settings</Button>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Statistics</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-muted-foreground text-sm">Total Orders</p>
-                    <p className="text-2xl font-bold">{orders.length}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-sm">Total Revenue</p>
-                    <p className="text-2xl font-bold text-primary">
-                      ${orders.reduce((sum, order) => sum + order.totalAmount, 0)}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-sm">Unread Messages</p>
-                    <p className="text-2xl font-bold">{messages.filter(m => !m.isRead).length}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground text-sm">Pending Orders</p>
-                    <p className="text-2xl font-bold">{orders.filter(o => o.status === "pending").length}</p>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Order Status Breakdown</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
-                {["pending", "confirmed", "processing", "shipped", "delivered", "cancelled"].map(
-                  (status) => (
-                    <div key={status} className="flex justify-between items-center">
-                      <span className="capitalize text-sm">{status}</span>
-                      <Badge>
-                        {orders.filter((o) => o.status === status).length}
-                      </Badge>
                     </div>
-                  )
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        )}
-      </main>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <p className="text-sm">{msg.message}</p>
+                    {!msg.isRead && (
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() =>
+                          markAsReadMutation.mutate({ messageId: msg.id })
+                        }
+                      >
+                        Mark as Read
+                      </Button>
+                    )}
+                  </CardContent>
+                </Card>
+              ))
+            )}
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
   );
 }
