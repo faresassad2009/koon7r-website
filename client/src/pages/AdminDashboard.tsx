@@ -25,17 +25,15 @@ const statusColors: Record<string, string> = {
 };
 
 export default function AdminDashboard() {
-  const { user, logout } = useAuth();
+  const { user, loading, logout } = useAuth();
   const [, setLocation] = useLocation();
   const [selectedTab, setSelectedTab] = useState<"orders" | "settings">("orders");
 
-  // Redirect if not admin
-  if (user?.role !== "admin") {
-    setLocation("/");
-    return null;
-  }
+  // Always call hooks at the top level
+  const ordersQuery = trpc.orders.all.useQuery(undefined, {
+    enabled: !!user && user.role === "admin",
+  });
 
-  const ordersQuery = trpc.orders.all.useQuery();
   const updateStatusMutation = trpc.orders.updateStatus.useMutation({
     onSuccess: () => {
       toast.success("Order status updated!");
@@ -55,6 +53,21 @@ export default function AdminDashboard() {
       toast.error("Failed to delete order");
     },
   });
+
+  // Wait for auth to load
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <p className="text-muted-foreground">Loading...</p>
+      </div>
+    );
+  }
+
+  // Redirect if not admin
+  if (!user || user.role !== "admin") {
+    setLocation("/");
+    return null;
+  }
 
   const handleLogout = async () => {
     await logout();
