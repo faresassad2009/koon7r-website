@@ -97,11 +97,77 @@ export default function CustomDesignSection({ onAddToCart }: CustomDesignSection
     return basePrice + frontPrice + backPrice;
   };
 
-  const handleAddToCart = () => {
+  const captureDesignImage = async (): Promise<string> => {
+    const container = designContainerRef.current;
+    if (!container) return "";
+
+    try {
+      // Create a canvas to combine the t-shirt and design
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return "";
+
+      // Set canvas size
+      const width = 800;
+      const height = 800;
+      canvas.width = width;
+      canvas.height = height;
+
+      // Load and draw the t-shirt background
+      const tshirtImg = new Image();
+      tshirtImg.crossOrigin = "anonymous";
+      const tshirtSrc = view === "front" ? "/assets/front.png" : "/assets/back.png";
+      
+      await new Promise((resolve, reject) => {
+        tshirtImg.onload = resolve;
+        tshirtImg.onerror = reject;
+        tshirtImg.src = tshirtSrc;
+      });
+
+      ctx.drawImage(tshirtImg, 0, 0, width, height);
+
+      // Draw the custom design on top
+      const currentDesignSrc = view === "front" ? frontDesign : backDesign;
+      if (currentDesignSrc) {
+        const designImg = new Image();
+        designImg.crossOrigin = "anonymous";
+        
+        await new Promise((resolve, reject) => {
+          designImg.onload = resolve;
+          designImg.onerror = reject;
+          designImg.src = currentDesignSrc;
+        });
+
+        // Calculate design position and size
+        const designWidth = width / 2;
+        const designHeight = height / 3;
+        const x = (position.x / 100) * width;
+        const y = (position.y / 100) * height;
+
+        // Apply transformations
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.rotate((rotation * Math.PI) / 180);
+        ctx.scale(scale, scale);
+        ctx.drawImage(designImg, -designWidth / 2, -designHeight / 2, designWidth, designHeight);
+        ctx.restore();
+      }
+
+      return canvas.toDataURL("image/png");
+    } catch (error) {
+      console.error("Failed to capture design:", error);
+      return frontDesign || backDesign || "";
+    }
+  };
+
+  const handleAddToCart = async () => {
     if (!frontDesign && !backDesign) {
       toast.error("Please add at least one design!");
       return;
     }
+
+    // Capture the final design image
+    const finalImage = await captureDesignImage();
 
     const totalPrice = calculatePrice();
     onAddToCart({
@@ -109,7 +175,7 @@ export default function CustomDesignSection({ onAddToCart }: CustomDesignSection
       name: `Custom ${productType.toUpperCase()}`,
       price: totalPrice,
       size,
-      image: frontDesign || backDesign || "",
+      image: finalImage,
     });
 
     toast.success("Custom design added to cart!");
