@@ -1,5 +1,0 @@
-[[redirects]]
-  from = "/api/trpc/*"
-  to = "/.netlify/functions/index/:splat"
-  status = 200
-  force = true
